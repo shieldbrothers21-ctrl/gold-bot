@@ -1,51 +1,76 @@
-import requests, pandas as pd, time
+import requests, time, os
+from collections import deque
+from flask import Flask
+import threading
 BOT_TOKEN = "8338491179:AAFGF81VyYzJvRT7CDgjlcgja6TKfCBF_-0"
 CHAT_ID = "8313326862"
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "BOT 1 OPTION B - REAL XAU CFD - Hidden+Regular LIVE!"
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+threading.Thread(target=run_web, daemon=True).start()
 def send_tg(msg):
     try:
         url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=10)
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg}, timeout=15)
     except: pass
-send_tg("🚀 XAUUSD 15min PRO Bot LIVE 24/7!\n✅ Cloud active!")
-last_alert = 0
+def get_real_xau():
+    try:
+        r = requests.get("https://api.gold-api.com/price/XAU", timeout=10).json()
+        return float(r['price'])
+    except: return None
+def rsi_calc(prices, p=14):
+    if len(prices) < p+1: return 50
+    deltas = [prices[i+1]-prices[i] for i in range(len(prices)-1)]
+    gains = [d if d>0 else 0 for d in deltas[-p:]]
+    losses = [-d if d<0 else 0 for d in deltas[-p:]]
+    ag = sum(gains)/p
+    al = sum(losses)/p
+    if al==0: return 100
+    return 100 - (100/(1+ag/al))
+prices = deque(maxlen=200)
+rsis = deque(maxlen=200)
+send_tg("🚀 BOT 1 OPTION B LIVE!\nREAL XAU CFD Onana NOT GC1\nHidden+Regular\nFast 10sec\n5-10 signals/day")
+last_signal = 0
 while True:
     try:
-        url = "https://api.binance.com/api/v3/klines?symbol=PAXGUSDT&interval=15m&limit=200"
-        data = requests.get(url, timeout=10).json()
-        df = pd.DataFrame(data, columns=['t','o','h','l','c','v','a','b','c1','d','e','f'])
-        df['c'] = df['c'].astype(float)
-        df['l'] = df['l'].astype(float)
-        df['h'] = df['h'].astype(float)
-        d = df['c'].diff()
-        g = d.where(d>0,0).rolling(14).mean()
-        lo = -d.where(d<0,0).rolling(14).mean()
-        df['rsi'] = 100 - (100 / (1 + g/lo))
-        lows, highs = [], []
-        for i in range(10, len(df)-5):
-            if df['l'].iloc[i] == df['l'].iloc[i-5:i+5].min():
-                lows.append(i)
-            if df['h'].iloc[i] == df['h'].iloc[i-5:i+5].max():
-                highs.append(i)
-        price = df['c'].iloc[-1]
-        if time.time() - last_alert < 900:
-            time.sleep(60)
+        xau = get_real_xau()
+        if not xau:
+            time.sleep(10)
             continue
-        signal = None
-        if len(lows) >= 2:
-            p1, p2 = lows[-2], lows[-1]
-            if df['l'].iloc[p2] > df['l'].iloc[p1] and df['rsi'].iloc[p2] < df['rsi'].iloc[p1]:
-                sl = df['l'].iloc[p1] - 3
-                risk = price - sl
-                signal = f"🔥 HIDDEN BULLISH XAUUSD\n✅ ENTRY: ${price:.2f}\n🛑 SL: ${sl:.2f}\n🎯 TP1: ${price+risk:.2f}\n🎯 TP2: ${price+risk*2:.2f}"
-        if len(highs) >= 2:
-            p1, p2 = highs[-2], highs[-1]
-            if df['h'].iloc[p2] < df['h'].iloc[p1] and df['rsi'].iloc[p2] > df['rsi'].iloc[p1]:
-                sl = df['h'].iloc[p1] + 3
-                risk = sl - price
-                signal = f"🔥 HIDDEN BEARISH XAUUSD\n❌ ENTRY: ${price:.2f}\n🛑 SL: ${sl:.2f}\n🎯 TP1: ${price-risk:.2f}\n🎯 TP2: ${price-risk*2:.2f}"
-        if signal:
-            send_tg(signal)
-            last_alert = time.time()
-        time.sleep(60)
+        prices.append(xau)
+        r = rsi_calc(list(prices))
+        rsis.append(r)
+        if len(prices) < 30:
+            time.sleep(10)
+            continue
+        if time.time() - last_signal < 300:
+            time.sleep(10)
+            continue
+        pl, rl = list(prices), list(rsis)
+        lows, highs = [], []
+        for i in range(10, len(pl)-5):
+            if pl[i] == min(pl[i-5:i+5]): lows.append(i)
+            if pl[i] == max(pl[i-5:i+5]): highs.append(i)
+        sig = None
+        if len(lows)>=2:
+            a,b = lows[-2], lows[-1]
+            if pl[b] > pl[a] and rl[b] < rl[a]:
+                sig = f"🔥 HIDDEN BULLISH\nBUY REAL XAU ${xau:.2f} SL ${pl[a]-3:.2f}"
+            elif pl[b] < pl[a] and rl[b] > rl[a]:
+                sig = f"🔥 REGULAR BULLISH REVERSAL\nBUY ${xau:.2f} SL ${pl[b]-3:.2f}"
+        if len(highs)>=2 and sig is None:
+            a,b = highs[-2], highs[-1]
+            if pl[b] < pl[a] and rl[b] > rl[a]:
+                sig = f"🔥 HIDDEN BEARISH\nSELL REAL XAU ${xau:.2f} SL ${pl[a]+3:.2f}"
+            elif pl[b] > pl[a] and rl[b] < rl[a]:
+                sig = f"🔥 REGULAR BEARISH REVERSAL\nSELL ${xau:.2f} SL ${pl[b]+3:.2f}"
+        if sig:
+            send_tg(sig)
+            last_signal = time.time()
+        time.sleep(10)
     except:
         time.sleep(10)
