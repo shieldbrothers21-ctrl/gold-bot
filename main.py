@@ -145,7 +145,7 @@ def onana_analyze():
             "price": price, "bsl": bsl, "ssl": ssl, "bsl_4h": bsl_4h, "ssl_4h": ssl_4h,
             "ob_high": bear_ob_high, "ob_low": bear_ob_low,
             "key": bear_ob_low + 1, "sl": bear_ob_high + 2,
-            "tp1": price - 10, "tp2": ssl, "tp3": ssl_4h,
+            "tp1": price - 10, "tp2": ssl, "tp3": ssl_4h-10,
             "delta": delta, "buy": buy_vol, "sell": sell_vol,
             "trend": trend_1h, "trend_4h": trend_4h, "c5": c5, "c15": c15
         }
